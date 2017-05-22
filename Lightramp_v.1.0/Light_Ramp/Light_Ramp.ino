@@ -43,10 +43,8 @@ void setup() {
   sgtl5000_1.enable();
   sgtl5000_1.volume(0.5);
   sgtl5000_1.inputSelect(AUDIO_INPUT_MIC);
-  sgtl5000_1.micGain(36);
+  sgtl5000_1.micGain(10);
   
-  usbMIDI.setHandleNoteOn(OnNoteOn);
-//  usbMIDI.setHandleControlChange(OnControlChange);
   
   FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUMPIXELS);
 
@@ -55,60 +53,38 @@ void setup() {
 elapsedMillis msecs;
 
 void loop() {
-  midi(); 
 
    if (msecs > 40) {
     if (peak1.available() && peak2.available()) {
       msecs = 0;
       float leftNumber = peak1.read();
       float rightNumber = peak2.read();
-      int leftPeak = leftNumber * 30.0;
-      int rightPeak = rightNumber * 30.0;
+      int leftPeak = leftNumber * NUMPIXELS;
+      int rightPeak = rightNumber * NUMPIXELS;
       int count;
-      for (count=0; count < 30-leftPeak; count++) {
+      for (count=0; count < NUMPIXELS-leftPeak; count++) {
         Serial.print(" ");
       }
-      while (count++ < 30) {
+      while (count++ < NUMPIXELS) {
         Serial.print("<");
       }
       Serial.print("||");
       for (count=0; count < rightPeak; count++) {
         Serial.print(">");
       }
-      while (count++ < 30) {
+      while (count++ < NUMPIXELS) {
         Serial.print(" ");
       }
       Serial.print(leftNumber);
       Serial.print(", ");
       Serial.print(rightNumber);
       Serial.println();
+      for(int i=1; i<NUMPIXELS; i++){
+        if(i<= leftPeak) leds[NUMPIXELS-i] = CRGB::Red;
+        else if(i> leftPeak) leds[NUMPIXELS-i] = CRGB::Blue;
+      }
+      FastLED.show();
     }
   }
 }
-
-void changeToRed() {
-  // Turn the LEDs on
-    for (int i = 0; i < NUMPIXELS; i++) {
-      leds[i] = CRGB::Red;
-    }
-   FastLED.show();
-}
-
-void changeToGreen() {
-  // Turn the LEDs on, then pause
-    for (int i = 0; i < NUMPIXELS; i++) {
-      leds[i] = CRGB::Green;
-    }
-   FastLED.show();
-}
-
-void changeToBlue() {
-  // Turn the LEDs on, then pause
-    for (int i = 0; i < NUMPIXELS; i++) {
-      leds[i] = CRGB::Blue;
-    }
-   FastLED.show();
-}
-
-
 
