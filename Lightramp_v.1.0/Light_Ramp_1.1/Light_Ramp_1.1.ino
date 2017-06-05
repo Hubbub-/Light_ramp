@@ -5,14 +5,12 @@
 #define FASTLED_ALLOW_INTERRUPTS 0  // THIS IS NEEDED!!!
 
 //Audio code start
-
 #include <Audio.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
 #include <SerialFlash.h>
-
-// GUItool: begin automatically generated code
+//Patch Audio objects
 AudioInputI2SQuad        i2s_quad1;      //xy=233,261
 AudioAnalyzePeak         peak1;          //xy=407,219
 AudioAnalyzePeak         peak2;          //xy=413,259
@@ -24,73 +22,91 @@ AudioConnection          patchCord3(i2s_quad1, 2, peak3, 0);
 AudioConnection          patchCord4(i2s_quad1, 3, peak4, 0);
 AudioControlSGTL5000     audioShield1;     //xy=234,178
 AudioControlSGTL5000     audioShield2;     //xy=234,178
-// GUItool: end automatically generated code
 
 
-/*
-// GUItool: begin automatically generated code
-AudioInputI2S            i2s1;           //xy=176,262
-AudioAnalyzePeak         peak1;          //xy=407,219
-AudioAnalyzePeak         peak2;          //xy=413,259
-AudioAnalyzePeak         peak3;          //xy=422,299
-AudioAnalyzePeak         peak4;          //xy=430,335
-AudioConnection          patchCord1(i2s1, 0, peak1, 0);
-AudioConnection          patchCord2(i2s1, 0, peak2, 0);
-AudioConnection          patchCord3(i2s1, 1, peak3, 0);
-AudioConnection          patchCord4(i2s1, 1, peak4, 0);
-AudioControlSGTL5000     audioShield1;     //xy=234,178
-// GUItool: end automatically generated code
-*/
-
-
-
+//FastLED
 #include "FastLED.h"
-
 #define NUMPIXELS 28
+#define LEDPIN 17
 
-#define DATA_PIN 17
-
-// 1 sec. frequency
-unsigned long interval=1000;    // the time we need to wait
-unsigned long previousMillis=0; // millis() returns an unsigned long.
 
 // Define the array of leds
 CRGB leds[NUMPIXELS];
 
+elapsedMillis msecs;  //keeps track of time
+
+//Arrays to store variables from each input
+float peak[4];      //Mapped values taken from the peak analyzer
+float level[4];     //Post-fade level (applied to the leds)
+float targLevel[4]; //Target for the fade
+
+
+
 void setup() {
   Serial.begin(115200);
-  AudioMemory(24);
-  audioShield1.setAddress(LOW);
-  audioShield1.enable();
-  audioShield1.volume(0.5);
-  audioShield1.inputSelect(AUDIO_INPUT_LINEIN);
-  audioShield2.setAddress(HIGH);
+
+  //Setup audio boards
+  AudioMemory(24);  // This should be enough memory for the audio processing
+  audioShield1.setAddress(LOW);  // Set the address for board 1
+  audioShield1.enable();         // Enable board 1
+  audioShield1.volume(0.5);      // Set board 1 volume
+  audioShield1.inputSelect(AUDIO_INPUT_LINEIN); // Select the right input for board 1
+  audioShield2.setAddress(HIGH);  //Repeat steps for board 2
   audioShield2.enable();
   audioShield2.volume(0.5);
   audioShield2.inputSelect(AUDIO_INPUT_LINEIN);
   
-  
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUMPIXELS);
+  //Start LEDs
+  FastLED.addLeds<NEOPIXEL, LEDPIN>(leds, NUMPIXELS);
 
 }
 
-elapsedMillis msecs;
 
-float peak[4];
-float level[4];
-float targLevel[4];
 
 void loop() {
 
-   if (msecs > 40) {
+   if (msecs > 40) {  // do every 40 milliseconds
+    
+    // If the peak analysis is available for all channels
     if (peak1.available() && peak2.available() && peak3.available() && peak4.available()) {
-      msecs = 0;
+      msecs = 0;  // reset the timer
+      
+      // read analysers
       peak[0] = peak1.read() * NUMPIXELS;
       peak[1] = peak2.read() * NUMPIXELS;
       peak[2] = peak3.read() * NUMPIXELS;
       peak[3] = peak4.read() * NUMPIXELS;
 
-      int count;
+      // Set target levels to the peaks
+      for(int i=0; i<4; i++){
+        targLevel[i] = peak[i];
+      }
+      printLevels();  // Prints the levels to serial monitor
+    }
+  }
+
+  // apply fades to all the levels
+  for(int i=0; i<4; i++){
+    level[i] = fade(level[i], targLevel[i], 0.1);
+  }
+
+  // Show levels on LEDs
+  for(int i=0; i<NUMPIXELS; i++){
+    leds[i] = CRGB::Black;  // Set all leds to black
+    
+    if(i < level[0]-1) leds[i] += CRGB::Red;  // Make pixels lower than level0 red
+    if(i < level[1]-1) leds[i] += CRGB::Blue; // Make pixels lower than level1 blue
+    if(i >= NUMPIXELS-level[2]) leds[i] += CRGB::Red;   // pixels higher than level2 red (inverted)
+    if(i >= NUMPIXELS-level[3]) leds[i] += CRGB::Green; // pixels higher than level2 green (inverted)
+  }
+  FastLED.show();    // Render LEDs
+}
+
+
+//--------------------------------------------------------------------------
+// print levels
+void printLevels(){
+  int count;
       for (count=0; count < NUMPIXELS-peak[0]; count++) {
         Serial.print(" ");
       }
@@ -120,46 +136,23 @@ void loop() {
         Serial.print(" ");
       }
       Serial.println();
-
-
-      
-      for(int i=0; i<4; i++){
-        targLevel[i] = peak[i];
-      }
-     
-    }
-  }
-
-  for(int i=0; i<4; i++){
-    level[i] = fade(level[i], targLevel[i], 0.1);
-  }
-  
-  for(int i=0; i<NUMPIXELS; i++){
-    leds[i] = CRGB::Black;
-    if(i <= level[0]) leds[i] += CRGB::Red;  // if pixel is lower than level1
-    if(i <= level[1]) leds[i] += CRGB::Blue;
-    if(i >= NUMPIXELS-level[2]) leds[i] += CRGB::Red;
-    if(i >= NUMPIXELS-level[3]) leds[i] += CRGB::Green;
-  }
-  FastLED.show();
 }
 
 
 //--------------------------------------------------------------------------
 
-
 //fade function
 float fade(float current, float target, float amount){
   float result;
-  if(current < target){           // if the current value is less than the target
-    result = current + abs(amount);    // add the amount
-    if(result > target){          // 
+  if(current < target){              // if the current value is less than the target
+    result = current + abs(amount);  // add the amount
+    if(result > target){             // Limit the result
       result = target;
     }
   }
-  else if(current > target){
-    result = current - abs(amount);
-    if(result < target){
+  else if(current > target){         // if the current value is greater than the target
+    result = current - abs(amount);  // subract the amount
+    if(result < target){             // limit the result
       result = target;
     }
   }
